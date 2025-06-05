@@ -1236,3 +1236,12 @@ body {
 .toggle-icon.rotated {
   transform: rotate(180deg);
 }
+
+.brand-search-input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}

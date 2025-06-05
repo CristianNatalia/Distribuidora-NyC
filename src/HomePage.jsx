@@ -70,6 +70,7 @@ export default function HomePage() {
     setSearchScope("brand");
     setSearchTerm("");
     setCurrentPage(0);
+    setIsSidebarVisible(false);
   };
 
   useEffect(() => {

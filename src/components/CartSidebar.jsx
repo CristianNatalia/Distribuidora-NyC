@@ -11,13 +11,21 @@ export default function CartSidebar({ visible, onClose }) {
   const [bonificacionCliente, setBonificacionCliente] = useState(0);
   const [bonificacionPago, setBonificacionPago] = useState(0);
   const [margen, setMargen] = useState(0);
-  const IVA = 21; // fijo
+  const IVA = 21;
 
-  const subtotal = cart.reduce((sum, i) => sum + (i.offerPrice ?? i.price) * i.quantity, 0);
+  // ✅ Función para calcular precio con margen por producto
+  const getPriceWithMargin = (price) => price + (price * margen / 100);
+
+  // ✅ Subtotal con margen incluido por producto
+  const subtotal = cart.reduce((sum, i) => {
+    const basePrice = i.offerPrice ?? i.price;
+    const finalPrice = getPriceWithMargin(basePrice);
+    return sum + finalPrice * i.quantity;
+  }, 0);
+
   const bonificacionTotal = (subtotal * (bonificacionCliente + bonificacionPago)) / 100;
-  const margenTotal = ((subtotal - bonificacionTotal) * margen) / 100;
-  const ivaTotal = ((subtotal - bonificacionTotal + margenTotal) * IVA) / 100;
-  const totalFinal = subtotal - bonificacionTotal + margenTotal + ivaTotal;
+  const ivaTotal = ((subtotal - bonificacionTotal) * IVA) / 100;
+  const totalFinal = subtotal - bonificacionTotal + ivaTotal;
 
   const handleGenerate = () => {
     if (!client.nombre || !client.telefono || !client.email) {
@@ -44,22 +52,20 @@ export default function CartSidebar({ visible, onClose }) {
 
       autoTable(doc, {
         startY: 56,
-        head: [['Producto', 'Marca', 'Cant.', 'Precio', 'Subtotal']],
+        head: [['Producto', 'Marca', 'Cant.', 'Precio Base', 'Margen', 'Precio Final', 'Subtotal']],
         body: cart.map(i => {
-          const unitPriceStr = i.offerPrice
-            ? `$${i.offerPrice.toLocaleString()} (Orig: $${i.price.toLocaleString()})`
-            : `$${i.price.toLocaleString()}`;
-
-          const subtotal = (i.offerPrice ?? i.price) * i.quantity;
-          const subtotalStr = `$${subtotal.toFixed(2)}` +
-            (i.offerPrice ? ` (Orig: $${(i.price * i.quantity).toFixed(2)})` : '');
+          const basePrice = i.offerPrice ?? i.price;
+          const priceWithMargin = getPriceWithMargin(basePrice);
+          const subtotal = priceWithMargin * i.quantity;
 
           return [
             i.name,
             i.brand,
             i.quantity,
-            unitPriceStr,
-            subtotalStr
+            `$${basePrice.toFixed(2)}`,
+            `${margen}%`,
+            `$${priceWithMargin.toFixed(2)}`,
+            `$${subtotal.toFixed(2)}`
           ];
         })
       });
@@ -68,12 +74,11 @@ export default function CartSidebar({ visible, onClose }) {
       doc.text(`Subtotal: $${subtotal.toFixed(2)}`, 14, finalY);
       doc.text(`Bonificación cliente: -$${((subtotal * bonificacionCliente) / 100).toFixed(2)} (${bonificacionCliente}%)`, 14, finalY + 7);
       doc.text(`Bonificación por pago: -$${((subtotal * bonificacionPago) / 100).toFixed(2)} (${bonificacionPago}%)`, 14, finalY + 14);
-      doc.text(`Margen aplicado: +$${margenTotal.toFixed(2)} (${margen}%)`, 14, finalY + 21);
-      doc.text(`IVA: +$${ivaTotal.toFixed(2)} (21%)`, 14, finalY + 28);
-      doc.text(`Total final: $${totalFinal.toFixed(2)}`, 14, finalY + 35);
+      doc.text(`IVA: +$${ivaTotal.toFixed(2)} (21%)`, 14, finalY + 21);
+      doc.text(`Total final: $${totalFinal.toFixed(2)}`, 14, finalY + 28);
 
       if (ahorro > 0) {
-        doc.text(`Ahorro estimado: $${ahorro.toFixed(2)}`, 14, finalY + 42);
+        doc.text(`Ahorro estimado: $${ahorro.toFixed(2)}`, 14, finalY + 35);
       }
 
       doc.save('presupuesto.pdf');
