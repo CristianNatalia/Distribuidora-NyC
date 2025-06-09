@@ -1,3 +1,4 @@
+// src/components/CartSidebar.jsx
 import React, { useState } from 'react';
 import { useCart } from '../context/CartContext';
 import jsPDF from 'jspdf';
@@ -11,82 +12,99 @@ export default function CartSidebar({ visible, onClose }) {
   const [bonificacionCliente, setBonificacionCliente] = useState(0);
   const [bonificacionPago, setBonificacionPago] = useState(0);
   const [margen, setMargen] = useState(0);
-  const IVA = 21;
+  const IVA = 21; // fijo
 
-  // ✅ Función para calcular precio con margen por producto
-  const getPriceWithMargin = (price) => price + (price * margen / 100);
-
-  // ✅ Subtotal con margen incluido por producto
-  const subtotal = cart.reduce((sum, i) => {
-    const basePrice = i.offerPrice ?? i.price;
-    const finalPrice = getPriceWithMargin(basePrice);
-    return sum + finalPrice * i.quantity;
+  // 1) Subtotal base
+  const subtotalBase = cart.reduce((sum, i) => {
+    const price = i.offerPrice ?? i.price;
+    return sum + price * i.quantity;
   }, 0);
 
-  const bonificacionTotal = (subtotal * (bonificacionCliente + bonificacionPago)) / 100;
-  const ivaTotal = ((subtotal - bonificacionTotal) * IVA) / 100;
-  const totalFinal = subtotal - bonificacionTotal + ivaTotal;
+  // 2) Descuentos sobre subtotal base
+  const descuentoCliente = subtotalBase * bonificacionCliente / 100;
+  const descuentoPago = (subtotalBase - descuentoCliente) * bonificacionPago / 100;
+  const netoAntesIva = subtotalBase - descuentoCliente - descuentoPago;
+  const ivaTotal = netoAntesIva * IVA / 100;
+  const totalFinal = netoAntesIva + ivaTotal;
 
   const handleGenerate = () => {
     if (!client.nombre || !client.telefono || !client.email) {
-      return toast.error('Completá todos los campos');
+      toast.error('Completá todos los campos');
+      return;
     }
     try {
       const doc = new jsPDF();
       const now = new Date();
       const fecha = now.toLocaleDateString('es-AR');
       const hora = now.toLocaleTimeString('es-AR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
+        hour: '2-digit', minute: '2-digit', hour12: false
       });
 
+      // Header
       doc.text('Presupuesto', 14, 20);
       doc.text(`Fecha: ${fecha} - ${hora} hs`, 14, 27);
-      doc.text(`Nombre: ${client.nombre}`, 14, 34);
+      doc.text(`Cliente: ${client.nombre}`, 14, 34);
       doc.text(`Teléfono: ${client.telefono}`, 14, 41);
       doc.text(`Email: ${client.email}`, 14, 48);
 
-      const totalOriginal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-      const ahorro = totalOriginal - totalFinal;
-
+      // === 1ª Tabla: Costos base y descuentos ===
       autoTable(doc, {
         startY: 56,
-        head: [['Producto', 'Marca', 'Cant.', 'Precio Base', 'Margen', 'Precio Final', 'Subtotal']],
+        head: [['Producto', 'Marca', 'Cant.', 'Precio Base', 'Subt. Base']],
         body: cart.map(i => {
-          const basePrice = i.offerPrice ?? i.price;
-          const priceWithMargin = getPriceWithMargin(basePrice);
-          const subtotal = priceWithMargin * i.quantity;
-
+          const base = i.offerPrice ?? i.price;
           return [
             i.name,
             i.brand,
             i.quantity,
-            `$${basePrice.toFixed(2)}`,
+            `$${base.toFixed(2)}`,
+            `$${(base * i.quantity).toFixed(2)}`
+          ];
+        })
+      });
+
+      let y = doc.lastAutoTable.finalY + 10;
+      doc.text(`Subtotal base: $${subtotalBase.toFixed(2)}`, 14, y);
+      y += 7;
+      doc.text(`Bonif. cliente (${bonificacionCliente}%): -$${descuentoCliente.toFixed(2)}`, 14, y);
+      y += 7;
+      doc.text(`Bonif. pago (${bonificacionPago}%): -$${descuentoPago.toFixed(2)}`, 14, y);
+      y += 7;
+      doc.text(`Neto sin IVA: $${netoAntesIva.toFixed(2)}`, 14, y);
+      y += 7;
+      doc.text(`IVA ${IVA}%: +$${ivaTotal.toFixed(2)}`, 14, y);
+      y += 7;
+      doc.text(`Total final: $${totalFinal.toFixed(2)}`, 14, y);
+
+      // === 2ª Tabla: Precios de venta con margen ===
+      doc.addPage();
+      doc.text('Precios de Venta', 14, 16);
+      autoTable(doc, {
+        startY: 20,
+        head: [['Producto', 'Marca', 'Cant.', 'Precio Base', 'Precio c/ Margen', 'Margen %', 'Subtotal']],
+        body: cart.map(i => {
+          const base = i.offerPrice ?? i.price;
+          const venta = base * (1 + margen / 100);
+          const subtotal = venta * i.quantity;
+          return [
+            i.name,
+            i.brand,
+            i.quantity,
+            `$${base.toFixed(2)}`,
+            `$${venta.toFixed(2)}`,
             `${margen}%`,
-            `$${priceWithMargin.toFixed(2)}`,
             `$${subtotal.toFixed(2)}`
           ];
         })
       });
 
-      let finalY = doc.lastAutoTable.finalY + 10;
-      doc.text(`Subtotal: $${subtotal.toFixed(2)}`, 14, finalY);
-      doc.text(`Bonificación cliente: -$${((subtotal * bonificacionCliente) / 100).toFixed(2)} (${bonificacionCliente}%)`, 14, finalY + 7);
-      doc.text(`Bonificación por pago: -$${((subtotal * bonificacionPago) / 100).toFixed(2)} (${bonificacionPago}%)`, 14, finalY + 14);
-      doc.text(`IVA: +$${ivaTotal.toFixed(2)} (21%)`, 14, finalY + 21);
-      doc.text(`Total final: $${totalFinal.toFixed(2)}`, 14, finalY + 28);
-
-      if (ahorro > 0) {
-        doc.text(`Ahorro estimado: $${ahorro.toFixed(2)}`, 14, finalY + 35);
-      }
 
       doc.save('presupuesto.pdf');
       toast.success('PDF generado');
       setShowForm(false);
     } catch (er) {
+      console.error(er);
       toast.error('Error al generar PDF');
-      console.log(er);
     }
   };
 
@@ -115,15 +133,12 @@ export default function CartSidebar({ visible, onClose }) {
                       </>
                       : `$${i.price.toLocaleString()}`}
                   </p>
-
                   <div className="quantity-controls">
                     <button onClick={() => updateQuantity(i.code, -1)}>-</button>
                     <span>{i.quantity}</span>
                     <button onClick={() => updateQuantity(i.code, +1)}>+</button>
                   </div>
-                  <p>
-                    Subtotal: $ {(i.quantity * (i.offerPrice ?? i.price)).toFixed(2)}
-                  </p>
+                  <p>Subtotal: ${((i.offerPrice ?? i.price) * i.quantity).toFixed(2)}</p>
                 </div>
                 <button className="cart-button" onClick={() => removeFromCart(i.code)}>
                   Eliminar
@@ -151,9 +166,6 @@ export default function CartSidebar({ visible, onClose }) {
           ) : (
             <div className="modal-overlay">
               <div className="modal-content">
-                <h4><strong>Dirección:</strong> Calle 82 ex J Hernández 6189 (1650) SAN MARTÍN- PROV.BS.AS.</h4>
-                <h4><strong>Email:</strong> <a href="mailto:ventasdistribuidoranyc@gmail.com">ventasdistribuidoranyc@gmail.com</a></h4>
-                <h4><strong>Teléfono:</strong> +54 9 11-5710-1911</h4>
                 <h3>Datos del cliente</h3>
                 {['nombre', 'telefono', 'email'].map(f => (
                   <input
@@ -166,30 +178,24 @@ export default function CartSidebar({ visible, onClose }) {
                 ))}
                 <h3>Bonificaciones y ajustes</h3>
                 <div className="modal-numeric-inputs">
-                  <h4><strong>Bonificación cliente (%)</strong></h4>
-                  <input
-                    type="number"
+                  <h4>Bonif. cliente (%)</h4>
+                  <input type="number"
                     value={bonificacionCliente}
                     onChange={e => setBonificacionCliente(Number(e.target.value))}
                   />
-                  <h4><strong>Bonificación por pago (%)</strong></h4>
-                  <input
-                    type="number"
+                  <h4>Bonif. pago (%)</h4>
+                  <input type="number"
                     value={bonificacionPago}
                     onChange={e => setBonificacionPago(Number(e.target.value))}
                   />
-                  <h4><strong>Margen (%)</strong></h4>
-                  <input
-                    type="number"
+                  <h4>Margen (%)</h4>
+                  <input type="number"
                     value={margen}
                     onChange={e => setMargen(Number(e.target.value))}
                   />
-                  <h4><strong>IVA (%)</strong></h4>
-                  <select>
-                    <option value={IVA}>{IVA}</option>
-                  </select>
+                  <h4>IVA (%)</h4>
+                  <input type="number" value={IVA} readOnly />
                 </div>
-                <br/>
                 <div className="modal-buttons">
                   <button onClick={() => setShowForm(false)} className="modal-cancel-button">
                     ← Volver
