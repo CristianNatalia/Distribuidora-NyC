@@ -14,6 +14,9 @@ export default function CartSidebar({ visible, onClose }) {
   const [margen, setMargen] = useState(0);
   const [IVA, setIva] = useState(21); // ahora controlado por select
 
+  //const [preciosPersonalizados, setPreciosPersonalizados] = useState(false);
+  let preciosPersonalizados = false;
+
 
   // 1) Subtotal base
   const subtotalBase = cart.reduce((sum, i) => {
@@ -33,6 +36,8 @@ export default function CartSidebar({ visible, onClose }) {
     const price = i.price;
     return sum + price * i.quantity;
   }, 0);
+
+
   const descuentoClienteOriginal = subtotalOriginal * bonificacionCliente / 100;
   const descuentoPagoOriginal = (subtotalOriginal - descuentoClienteOriginal) * bonificacionPago / 100;
   const netoAntesIvaOriginal = subtotalOriginal - descuentoClienteOriginal - descuentoPagoOriginal;
@@ -43,154 +48,176 @@ export default function CartSidebar({ visible, onClose }) {
   const diferencia = totalOriginal - totalFinal;
 
 
-const handleGenerate = () => {
-  if (!client.nombre || !client.telefono || !client.email) {
-    toast.error('Completá todos los campos');
-    return;
-  }
+  const handleGenerate = () => {
+    if (!client.nombre || !client.telefono || !client.email) {
+      toast.error('Completá todos los campos');
+      return;
+    }
+    if (subtotalOriginal != subtotalBase) {
+      preciosPersonalizados = true;
+      console.log("true")
+    }
+    else {
+      preciosPersonalizados = false;
+      console.log("falso")
+    }
+    try {
+      const doc = new jsPDF();
+      doc.setFont('helvetica');
+      const now = new Date();
+      const fecha = now.toLocaleDateString('es-AR');
+      const hora = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-  try {
-    const doc = new jsPDF();
-    doc.setFont('helvetica');
-    const now = new Date();
-    const fecha = now.toLocaleDateString('es-AR');
-    const hora = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+      // Header principal
+      doc.setFontSize(18);
+      doc.setFont(undefined, 'bold');
+      doc.text('Presupuesto Comercial', 14, 20);
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Fecha: ${fecha} - ${hora} hs`, 14, 28);
+      doc.text(`Cliente: ${client.nombre}`, 14, 36);
+      doc.text(`Teléfono: ${client.telefono}`, 14, 43);
+      doc.text(`Email: ${client.email}`, 14, 50);
 
-    // Header principal
-    doc.setFontSize(18);
-    doc.setFont(undefined, 'bold');
-    doc.text('Presupuesto Comercial', 14, 20);
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'normal');
-    doc.text(`Fecha: ${fecha} - ${hora} hs`, 14, 28);
-    doc.text(`Cliente: ${client.nombre}`, 14, 36);
-    doc.text(`Teléfono: ${client.telefono}`, 14, 43);
-    doc.text(`Email: ${client.email}`, 14, 50);
+      // Línea divisoria
+      doc.setDrawColor(200);
+      doc.line(14, 54, 200, 54);
 
-    // Línea divisoria
-    doc.setDrawColor(200);
-    doc.line(14, 54, 200, 54);
+      // Tabla de productos
+      doc.setFontSize(13);
+      doc.setFont(undefined, 'bold');
+      doc.text('Detalle de productos (precios sin IVA)', 14, 62);
 
-    // Tabla de productos
-    doc.setFontSize(13);
-    doc.setFont(undefined, 'bold');
-    doc.text('Detalle de productos (precios sin IVA)', 14, 62);
+      autoTable(doc, {
+        startY: 66,
+        head: [['Producto', 'Marca', 'Cant.', 'Precio Lista', 'Oferta', 'Subtotal']],
+        body: cart.map(i => {
+          const base = i.price;
+          const oferta = i.offerPrice;
+          const precioUsado = oferta ?? base;
+          return [
+            i.name,
+            i.brand,
+            i.quantity,
+            `$${base.toFixed(2)}`,
+            oferta ? `$${oferta.toFixed(2)}` : '-',
+            `$${(precioUsado * i.quantity).toFixed(2)}`
+          ];
+        }),
+        styles: {
+          fontSize: 10,
+          cellPadding: 3,
+        },
+        headStyles: {
+          fillColor: [220, 220, 220],
+          textColor: 20,
+          fontStyle: 'bold',
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+      });
 
-    autoTable(doc, {
-      startY: 66,
-      head: [['Producto', 'Marca', 'Cant.', 'Precio Lista', 'Oferta', 'Subtotal']],
-      body: cart.map(i => {
-        const base = i.price;
-        const oferta = i.offerPrice;
-        const precioUsado = oferta ?? base;
-        return [
-          i.name,
-          i.brand,
-          i.quantity,
-          `$${base.toFixed(2)}`,
-          oferta ? `$${oferta.toFixed(2)}` : '-',
-          `$${(precioUsado * i.quantity).toFixed(2)}`
-        ];
-      }),
-      styles: {
-        fontSize: 10,
-        cellPadding: 3,
-      },
-      headStyles: {
-        fillColor: [220, 220, 220],
-        textColor: 20,
-        fontStyle: 'bold',
-      },
-      alternateRowStyles: {
-        fillColor: [245, 245, 245],
-      },
-    });
+      let y = doc.lastAutoTable.finalY + 10;
 
-    let y = doc.lastAutoTable.finalY + 10;
+      const addSummaryLine = (label, value, bold = false) => {
+        doc.setFont(undefined, bold ? 'bold' : 'normal');
+        doc.text(`${label} $${value.toFixed(2)}`, 14, y);
+        y += 7;
+      };
 
-    const addSummaryLine = (label, value, bold = false) => {
-      doc.setFont(undefined, bold ? 'bold' : 'normal');
-      doc.text(`${label} $${value.toFixed(2)}`, 14, y);
+      // Resumen de totales
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'bold');
+      doc.text('Resumen de cálculo', 14, y);
       y += 7;
-    };
 
-    // Resumen de totales
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
-    doc.text('Resumen de cálculo', 14, y);
-    y += 7;
+      addSummaryLine(`Subtotal original (usando ofertas si hay):`, subtotalBase);
+      addSummaryLine(`Descuento por cliente (${bonificacionCliente}%): -`, descuentoCliente);
+      addSummaryLine(`Descuento por forma de pago (${bonificacionPago}%): -`, descuentoPago);
+      addSummaryLine(`Neto antes de IVA:`, netoAntesIva);
+      addSummaryLine(`IVA (${IVA}%): +`, ivaTotal);
+      addSummaryLine(`Total final con IVA:`, totalFinal, true);
 
-    addSummaryLine(`Subtotal original (usando ofertas si hay):`, subtotalBase);
-    addSummaryLine(`Descuento por cliente (${bonificacionCliente}%): -`, descuentoCliente);
-    addSummaryLine(`Descuento por forma de pago (${bonificacionPago}%): -`, descuentoPago);
-    addSummaryLine(`Neto antes de IVA:`, netoAntesIva);
-    addSummaryLine(`IVA (${IVA}%): +`, ivaTotal);
-    addSummaryLine(`Total final con IVA:`, totalFinal, true);
+      if (preciosPersonalizados == true) {
+        y += 7;
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('Cálculo con los precios originales', 14, y);
+        y += 7;
+        addSummaryLine(`Subtotal original (usando los precios originales):`, subtotalOriginal);
+        addSummaryLine(`Descuento por cliente (${bonificacionCliente}%): -`, descuentoClienteOriginal);
+        addSummaryLine(`Descuento por forma de pago (${bonificacionPago}%): -`, descuentoPagoOriginal);
+        addSummaryLine(`Neto antes de IVA:`, netoAntesIvaOriginal);
+        addSummaryLine(`IVA (${IVA}%): +`, ivaTotal);
+        addSummaryLine(`Total final con IVA:`, totalOriginal, true);
+      }
 
-    y += 5;
-    doc.setDrawColor(200);
-    doc.line(14, y, 200, y);
-    y += 10;
+      y += 5;
+      doc.setDrawColor(200);
+      doc.line(14, y, 200, y);
+      y += 10;
 
-    // Comparación con precios originales
-    doc.setFont(undefined, 'bold');
-    doc.text('Comparativa con precios sin oferta', 14, y);
-    y += 7;
-    doc.setFont(undefined, 'normal');
-    addSummaryLine(`Total con precios originales:`, totalOriginal);
-    addSummaryLine(`Diferencia total por ofertas: -`, diferencia);
+      // Comparación con precios originales
+      doc.setFont(undefined, 'bold');
+      doc.text('Comparativa con precios sin oferta', 14, y);
+      y += 7;
+      doc.setFont(undefined, 'normal');
+      addSummaryLine(`Total con precios ofrecidos:`, totalFinal);
+      addSummaryLine(`Total con precios originales:`, totalOriginal);
+      addSummaryLine(`Diferencia total por ofertas: -`, diferencia);
 
-    // Página 2
-    doc.addPage();
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.text('Precios de venta sugeridos con margen aplicado', 14, 20);
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
-    doc.text(`(Calculados sobre precios con oferta si corresponde, con margen del ${margen}%)`, 14, 26);
+      // Página 2
+      doc.addPage();
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Precios de venta sugeridos con margen aplicado', 14, 20);
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`(Calculados sobre precios con oferta si corresponde, con margen del ${margen}%)`, 14, 26);
 
-    autoTable(doc, {
-      startY: 32,
-      head: [['Producto', 'Marca', 'Cant.', 'Precio', 'Precio + Margen', 'Margen', 'Subtotal']],
-      body: cart.map(i => {
-        const base = i.price;
-        const oferta = i.offerPrice;
-        const precioUsado = oferta ?? base;
-        const venta = precioUsado * (1 + margen / 100);
-        const subtotal = venta * i.quantity;
-        return [
-          i.name,
-          i.brand,
-          i.quantity,
-          `$${precioUsado.toFixed(2)}`,
-          `$${venta.toFixed(2)}`,
-          `${margen}%`,
-          `$${subtotal.toFixed(2)}`
-        ];
-      }),
-      styles: {
-        fontSize: 10,
-        cellPadding: 3,
-      },
-      headStyles: {
-        fillColor: [210, 230, 255],
-        textColor: 20,
-        fontStyle: 'bold',
-      },
-      alternateRowStyles: {
-        fillColor: [245, 245, 245],
-      },
-    });
+      autoTable(doc, {
+        startY: 32,
+        head: [['Producto', 'Marca', 'Cant.', 'Precio', 'Precio + Margen', 'Margen', 'Subtotal']],
+        body: cart.map(i => {
+          const base = i.price;
+          const oferta = i.offerPrice;
+          const precioUsado = oferta ?? base;
+          const venta = precioUsado * (1 + margen / 100);
+          const subtotal = venta * i.quantity;
+          return [
+            i.name,
+            i.brand,
+            i.quantity,
+            `$${precioUsado.toFixed(2)}`,
+            `$${venta.toFixed(2)}`,
+            `${margen}%`,
+            `$${subtotal.toFixed(2)}`
+          ];
+        }),
+        styles: {
+          fontSize: 10,
+          cellPadding: 3,
+        },
+        headStyles: {
+          fillColor: [210, 230, 255],
+          textColor: 20,
+          fontStyle: 'bold',
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+      });
 
-    doc.save('presupuesto.pdf');
-    toast.success('PDF generado');
-    setShowForm(false);
+      doc.save('presupuesto.pdf');
+      toast.success('PDF generado');
+      setShowForm(false);
 
-  } catch (er) {
-    console.error(er);
-    toast.error('Error al generar PDF');
-  }
-};
+    } catch (er) {
+      console.error(er);
+      toast.error('Error al generar PDF');
+    }
+  };
 
 
 
