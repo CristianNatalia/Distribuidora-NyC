@@ -17,6 +17,7 @@ export default function HomePage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [hiddenBrands, setHiddenBrands] = useState(new Set());
   const [cartOpen, setCartOpen] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [showDownloadOptions, setShowDownloadOptions] = useState(false);
@@ -27,6 +28,7 @@ export default function HomePage() {
   const { cart } = useCart();
   const [currentPage, setCurrentPage] = useState(0);
   const PRODUCTS_PER_PAGE = 50;
+  
 
   useEffect(() => {
     setLoading(true);
@@ -173,15 +175,15 @@ export default function HomePage() {
           )}
         </div>
         {loading ? (
-            <p></p>
-          ) : (
-        <button
-          className="download-pdf-button"
-          onClick={handleDownloadPdf}
-        >
-          Descargar productos en PDF / XLSX
-        </button>
-          )}
+          <p></p>
+        ) : (
+          <button
+            className="download-pdf-button"
+            onClick={handleDownloadPdf}
+          >
+            Descargar productos en PDF / XLSX
+          </button>
+        )}
       </div>
 
       <button className="toggle-sidebar-btn" onClick={toggleSidebar}>
@@ -206,6 +208,14 @@ export default function HomePage() {
             <BrandSelector
               selected={selectedBrand}
               onSelect={handleSelect}
+              hiddenBrands={hiddenBrands}
+              toggleHidden={(brand) => {
+                setHiddenBrands(h => {
+                  const copy = new Set(h);
+                  copy.has(brand) ? copy.delete(brand) : copy.add(brand);
+                  return copy;
+                });
+              }}
             />
           </aside>
         )}
@@ -221,14 +231,16 @@ export default function HomePage() {
             <p>Cargando…</p>
           ) : (
             <div className="product-grid">
-              {paginatedProducts.map(item => (
-                <ProductCard
-                  key={item.Código}
-                  product={item}
-                  onClick={() => setSelectedProduct(item)}
-                  selectedBrand={selectedBrand}
-                />
-              ))}
+              {paginatedProducts
+                .filter(p => !hiddenBrands.has(p.Marca))
+                .map(item => (
+                  <ProductCard
+                    key={item.Código}
+                    product={item}
+                    onClick={() => setSelectedProduct(item)}
+                    selectedBrand={selectedBrand}
+                  />
+                ))}
             </div>
           )}
 
